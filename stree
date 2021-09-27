@@ -1,0 +1,261 @@
+#!/bin/bash -
+#-----------------------------------------------------#
+# @ name
+# -----
+# stree - Creates a file listing for use with Vim.
+#
+# @synopsis
+# ---------
+# stree -dakt <arg>
+# stree -h[elp]
+#
+# @description
+# ------------
+# This tool just generates a nice file listing for those
+# who don't have tools like `tree`, etc. lying around.
+#
+# @options
+# --------
+# -d, --dir <arg>    
+#	Use directory as the file. 
+#
+# -a, --at <arg>      
+#	Generates the file at a location besides stdout
+#
+#     --top <arg>     
+#   Use <arg> as the source directory.
+#
+# -k, --skip <arg>    
+# 	Skip files or directories in <arg>
+#
+# -t, --type <arg>    
+# 	Skip each file type listed in <arg>
+#
+# -h, --help          
+#	Show this help and quit.
+#
+# @examples
+# ---------
+# None so far.
+#
+# @caveats
+# --------
+# None so far.
+#
+# @return values
+# --------------
+# 0	All was good.
+# 1	Invalid command line options supplied.
+#
+# @author
+# ---------
+# (c) 2014 by Antonio R. Collins (ramar@ventindustries.com)
+#
+# @license
+# ---------
+# Copyright (c) 2014 Antonio R. Collins (ramar@ventindustries.com)
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#-----------------------------------------------------#
+PROGRAM="stree"
+BINDIR="$(dirname "$(readlink -f $0)")"
+SELF="$(readlink -f $0)"
+# source $BINDIR/util.sh
+
+# usage - Show usage message and die with $STATUS
+usage() {
+   STATUS="${1:-0}"
+   echo "Usage: ./$PROGRAM
+	[ -  ]
+Content Flags:
+-d, --dir <arg>      Use directory as the file. 
+-a, --at <arg>       Generates the file at a certain location (besides stdout) 
+     --top <arg>     Use <arg> as the source directory.
+-k, --skip <arg>     Skip files or directories in <arg>
+-t, --type <arg>     Skip each file type.
+-e, --editor <arg>   Make a project file compatible with editor pointed to by <arg>.
+-h, --help          Show this help and quit.
+
+Supported editors are the following:
+ - vim
+ - emacs
+ - joe
+ - nano
+ - eclipse
+ - netbeans
+ - visualstudio
+"
+	exit $STATUS
+}
+
+
+# Die if no arguments received.
+[ -z "$BASH_ARGV" ] && printf "Nothing to do\n" > /dev/stderr && usage 1
+
+# Process options.
+while [ $# -gt 0 ]
+do
+   case "$1" in
+     -d|--dir)
+         DO_DIR=true
+         shift
+         DIR="$1"
+      ;;
+     -a|--at)
+         DO_AT=true
+         shift
+         OUTPUT_FILE="$1"
+      ;;
+     -c|--char)
+         shift
+         CHAR="$1"
+      ;;
+     -k|--skip)
+         IGNORE=true
+         shift
+         SKIP="$1"
+      ;;
+     -t|--type)
+         DO_FILES=true
+			shift
+			TYPE="$1"
+      ;;
+			-)
+			DIR='.'
+			;;
+	    -e|--editor)
+		  shift
+		  EDITOR_NAME="$1"
+      ;;
+     --new)		NEW=true;;
+     -h|--help)
+        usage 0
+      ;;
+     --) break;;
+     -*)
+      printf "Unknown argument received: $1\n" > /dev/stderr;
+      usage 1
+     ;;
+     *) break;;
+   esac
+shift
+done
+
+
+# Set global limits and an output file.
+DEPTH=1				
+MAX_DEPTH=15
+IGNORE_THIS=0
+OUTPUT_FILE=${OUTPUT_FILE:-"/dev/stdout"}
+DEPTH_TEXT=( 
+''
+' ' 
+'  '
+'   '
+'    '
+'     '
+'      '
+'       '
+'        '
+'         '
+'          '
+'           '
+'            '
+'             '
+'              '
+'               '
+)
+
+# Character space.
+CHAR=${CHAR:-" "}
+
+# Make sure we can write to the file. 
+[ -f "$OUTPUT_FILE" ] && {
+	test -O "$OUTPUT_FILE" || {
+		printf "Can't write to file '$OUTPUT_FILE'.\n" > /dev/stderr
+		exit 1
+	}
+}
+
+# Choose current directory if no dir is given.
+[ -z "$DIR" ] && DIR='.' 
+
+# Build skip database.
+SKIP=( `echo $SKIP | sed '{ s/, / /; s/,/ /g; }'` )
+
+# Directory must exist or die.
+[ ! -d "$DIR" ] && {
+	printf "$DIR does not exist." > /dev/stderr
+	exit 1
+}
+
+
+# Run the whole thing
+function fp() 
+{
+	# Stop at $DEPTH level
+	test $DEPTH -eq $MAX_DEPTH && ferror "Descending too deep." 1
+
+	# Check for a @ at the beginning, determining whether 
+	# this is the first entry or not.
+	cd "$1" || return
+	NAME=`basename "$1"`
+	test $DEPTH -eq 1 && NPATH=$1 || NPATH=$NAME
+	printf "${DEPTH_TEXT[$(( $DEPTH - 1 ))]}%s=%s {\n" $NAME $NPATH
+
+	# Get way more complex here...
+# find -maxdepth 1 -type f \( 
+#		-iname "*.c" \
+#		! -iname ".*" \ 
+#		! -iname "*.o" \ 
+#		! -iname "*.mp3" \ 
+#		! -iname "*.wav" \ 
+# 	! -path "./wk/*" \
+# 	! -path "./wk/*" \
+#		! -path "./vendor/*" \)
+#
+#
+	find -maxdepth 1 -type f | sort | sed "{ s#./##; s#^#${DEPTH_TEXT[$DEPTH]}# }"
+
+	# Now get the directory listing and descend if necessary
+	#	find . -maxdepth 1 -type d | grep -v '.git' | sort | tail -n +2 | xargs realpath | while read line
+	test "`find -maxdepth 1 -type d`" == '.' || {
+		find -maxdepth 1 -type d  | grep -v '.git' | sort | tail -n +2 | xargs realpath | while read line
+			do
+				# check for ignore dirs...
+				test ! -z $IGNORE && { 
+					for igdir in ${SKIP[@]}
+					do 
+						[[ `basename $line` == $igdir ]] && { IGNORE_THIS=1; break; }
+					done 
+				
+					test $IGNORE_THIS -eq 1 && { IGNORE_THIS=0; continue; }
+				}	
+
+				DEPTH=$(( $DEPTH + 1 ))
+				fp $line
+				DEPTH=$(( $DEPTH - 1 ))
+			done
+	}
+
+	printf "${DEPTH_TEXT[$(( $DEPTH - 1 ))]}}\n" $NAME $NAME
+}
+
+fp "`realpath $DIR`" > $OUTPUT_FILE 
+exit 0
